@@ -18,12 +18,31 @@ st.title("📅 Validador de Base Comparável por Calendário (Campanhas & SSS)")
 st.caption("Ferramenta Interna de Insights & Market Intelligence")
 
 # --- REGISTRO DE IDENTIFICAÇÃO DO USUÁRIO ---
-st.sidebar.header("🔑 Identificação do Usuário")
-user_email = st.sidebar.text_input("E-mail do Analista (IM):", placeholder="seu.nome@empresa.com.br")
+st.sidebar.header("🔑 Identificação do Analista")
 
-if not user_email or "@" not in user_email:
-    st.warning("👈 Por favor, informe seu e-mail corporativo no menu lateral para liberar o acesso ao sistema.")
-    st.stop()  # Interrompe a execução até que o e-mail seja informado
+# O usuário digita apenas o nome (ex: daniel.silva)
+usuario_input = st.sidebar.text_input(
+    "Usuário Seed:",
+    placeholder="seu.nome"
+).strip().lower()
+
+# Tratamento para evitar duplicidade caso a pessoa digite o e-mail completo
+if "@" in usuario_input:
+    usuario_prefixo = usuario_input.split("@")[0]
+else:
+    usuario_prefixo = usuario_input
+
+# Formação forçada do e-mail corporativo Seed
+if usuario_prefixo:
+    user_email = f"{usuario_prefixo}@seeddigital.com.br"
+    st.sidebar.caption(f"👤 Acessando como: **{user_email}**")
+else:
+    user_email = ""
+
+# Validação rígida de segurança
+if not user_email or not user_email.endswith("@seeddigital.com.br"):
+    st.warning("👈 Por favor, informe seu usuário corporativo no menu lateral para liberar o acesso ao sistema.")
+    st.stop()  # Trava a aplicação até que um usuário válido seja informado
 
 # 1. UPLOAD DE ARQUIVOS
 st.sidebar.markdown("---")
