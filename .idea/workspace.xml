@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f479ec02-5220-42c0-b4fe-0db4d9754250" name="Changes" comment="Versão final com log e auditoria (ajuste)">
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-    </list>
+    <list default="true" id="f479ec02-5220-42c0-b4fe-0db4d9754250" name="Changes" comment="Versão final com log e auditoria (ajuste de login)" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -93,12 +91,21 @@
       <option name="project" value="LOCAL" />
       <updated>1785951756343</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Versão final com log e auditoria (ajuste de login)">
+      <option name="closed" value="true" />
+      <created>1785954097966</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1785954097966</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Versão final com log e auditoria" />
     <MESSAGE value="Versão final com log e auditoria (ajuste)" />
-    <option name="LAST_COMMIT_MESSAGE" value="Versão final com log e auditoria (ajuste)" />
+    <MESSAGE value="Versão final com log e auditoria (ajuste de login)" />
+    <option name="LAST_COMMIT_MESSAGE" value="Versão final com log e auditoria (ajuste de login)" />
   </component>
 </project>

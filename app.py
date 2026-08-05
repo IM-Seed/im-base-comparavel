@@ -20,29 +20,26 @@ st.caption("Ferramenta Interna de Insights & Market Intelligence")
 # --- REGISTRO DE IDENTIFICAÇÃO DO USUÁRIO ---
 st.sidebar.header("🔑 Identificação do Analista")
 
-# O usuário digita apenas o nome (ex: daniel.silva)
 usuario_input = st.sidebar.text_input(
-    "Usuário Seed:",
-    placeholder="seu.nome"
+    "E-mail Corporativo:",
+    placeholder="seu.nome@seeddigital.com.br"
 ).strip().lower()
 
-# Tratamento para evitar duplicidade caso a pessoa digite o e-mail completo
-if "@" in usuario_input:
-    usuario_prefixo = usuario_input.split("@")[0]
-else:
-    usuario_prefixo = usuario_input
+user_email = ""
 
-# Formação forçada do e-mail corporativo Seed
-if usuario_prefixo:
-    user_email = f"{usuario_prefixo}@seeddigital.com.br"
-    st.sidebar.caption(f"👤 Acessando como: **{user_email}**")
+if usuario_input:
+    # Validação estrita: exige o e-mail completo terminado exatamente em @seeddigital.com.br
+    if usuario_input.endswith("@seeddigital.com.br") and usuario_input.count("@") == 1 and len(usuario_input.split("@")[0]) > 0:
+        user_email = usuario_input
+        st.sidebar.caption(f"👤 Acessando como: **{user_email}**")
+    else:
+        # Rejeita usuários sem e-mail completo ou com domínio diferente
+        st.sidebar.error("Login não autorizado")
+        st.stop()
 else:
-    user_email = ""
+    st.warning("👈 Por favor, informe seu e-mail corporativo no menu lateral para liberar o acesso ao sistema.")
+    st.stop()
 
-# Validação rígida de segurança
-if not user_email or not user_email.endswith("@seeddigital.com.br"):
-    st.warning("👈 Por favor, informe seu usuário corporativo no menu lateral para liberar o acesso ao sistema.")
-    st.stop()  # Trava a aplicação até que um usuário válido seja informado
 
 # 1. UPLOAD DE ARQUIVOS
 st.sidebar.markdown("---")
