@@ -6,6 +6,7 @@ import core_engine as engine
 
 st.set_page_config(page_title="Base Comparável Dinâmica | IM", layout="wide", page_icon="📅")
 
+# --- LOGO DA SEED NA BARRA LATERAL ---
 URL_LOGO_SEED = "http://seeddigital.com.br/images/Logo%20Seed%20Registrado.jpg"
 
 try:
@@ -13,10 +14,19 @@ try:
 except Exception:
     pass
 
-st.title("📅 Base Comparável por Calendário (Campanhas & Mês a Mês)")
-st.caption("Escolha entre a visão Consolidada do Período ou o detalhamento Mês a Mês.")
+st.title("📅 Validador de Base Comparável por Calendário (Campanhas & SSS)")
+st.caption("Ferramenta Interna de Insights & Market Intelligence")
 
-# 1. UPLOAD
+# --- REGISTRO DE IDENTIFICAÇÃO DO USUÁRIO ---
+st.sidebar.header("🔑 Identificação do Usuário")
+user_email = st.sidebar.text_input("E-mail do Analista (IM):", placeholder="seu.nome@empresa.com.br")
+
+if not user_email or "@" not in user_email:
+    st.warning("👈 Por favor, informe seu e-mail corporativo no menu lateral para liberar o acesso ao sistema.")
+    st.stop()  # Interrompe a execução até que o e-mail seja informado
+
+# 1. UPLOAD DE ARQUIVOS
+st.sidebar.markdown("---")
 st.sidebar.header("1. Upload de Arquivos")
 uploaded_file = st.sidebar.file_uploader("Suba a base (CSV ou Excel)", type=["csv", "xlsx"])
 
@@ -57,12 +67,17 @@ if uploaded_file is not None:
             st.header("5. Regras de Exclusão")
             ignorar_domingos = st.checkbox("Desconsiderar Domingos", value=True)
             ignorar_feriados = st.checkbox("Desconsiderar Feriados Nacionais", value=True)
-            pct_corte = st.slider("Corte de Presença de Dados (Padrão: 82%)", 50, 100, 82) / 100.0
+            pct_corte = st.slider("Corte de Presença de Dados (%)", 50, 100, 82) / 100.0
 
             st.markdown("---")
             btn_processar = st.form_submit_button("🚀 Processar Base Comparável", type="primary")
 
         if btn_processar:
+            # REGISTRO DO LOG NO CONSOLE/SERVIDOR
+            data_hora_acesso = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(
+                f"[LOG ACESSO] {data_hora_acesso} | Usuário: {user_email} | Arquivo: {uploaded_file.name} | Visão: {tipo_visao}")
+
             with st.spinner("Processando dados e aplicando regras de elegibilidade..."):
 
                 if tipo_metrica == "Faturamento / Vendas (R$)":
