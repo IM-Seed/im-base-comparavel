@@ -6,7 +6,7 @@ import core_engine as engine
 
 st.set_page_config(page_title="Base Comparável Dinâmica | IM", layout="wide", page_icon="📅")
 
-# --- LOGO DA SEED NA BARRA LATERAL ---
+# ---- LOGO DA SEED NA BARRA LATERAL ----
 URL_LOGO_SEED = "http://seeddigital.com.br/images/Logo%20Seed%20Registrado.jpg"
 
 try:
