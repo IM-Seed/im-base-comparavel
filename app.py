@@ -6,42 +6,31 @@ import core_engine as engine
 
 st.set_page_config(page_title="Base Comparável Dinâmica | IM", layout="wide", page_icon="📅")
 
-# ---- LOGO DA SEED NA BARRA LATERAL ----
 URL_LOGO_SEED = "http://seeddigital.com.br/images/Logo%20Seed%20Registrado.jpg"
-
 try:
     st.sidebar.image(URL_LOGO_SEED, use_container_width=True)
 except Exception:
     pass
 
-st.title("📅 Validador de Base Comparável por Calendário (Campanhas & SSS)")
-st.caption("Ferramenta Interna de Insights & Market Intelligence")
+st.title("📅 Validador de Base Comparável (Campanhas & SSS)")
+st.caption("Análise de Performance, Calendário Corporativo e Elegibilidade de Lojas")
 
-# --- REGISTRO DE IDENTIFICAÇÃO DO USUÁRIO ---
+# 1. VALIDAÇÃO DE ACESSO
 st.sidebar.header("🔑 Identificação do Analista")
-
-usuario_input = st.sidebar.text_input(
-    "E-mail Corporativo:",
-    placeholder="seu.nome@seeddigital.com.br"
-).strip().lower()
-
-user_email = ""
+usuario_input = st.sidebar.text_input("E-mail Corporativo:", placeholder="seu.nome@seeddigital.com.br").strip().lower()
 
 if usuario_input:
-    # Validação estrita: exige o e-mail completo terminado exatamente em @seeddigital.com.br
-    if usuario_input.endswith("@seeddigital.com.br") and usuario_input.count("@") == 1 and len(usuario_input.split("@")[0]) > 0:
-        user_email = usuario_input
-        st.sidebar.caption(f"👤 Acessando como: **{user_email}**")
+    if usuario_input.endswith("@seeddigital.com.br") and usuario_input.count("@") == 1 and len(
+            usuario_input.split("@")[0]) > 0:
+        st.sidebar.caption(f"👤 Acessando como: **{usuario_input}**")
     else:
-        # Rejeita usuários sem e-mail completo ou com domínio diferente
         st.sidebar.error("Login não autorizado")
         st.stop()
 else:
     st.warning("👈 Por favor, informe seu e-mail corporativo no menu lateral para liberar o acesso ao sistema.")
     st.stop()
 
-
-# 1. UPLOAD DE ARQUIVOS
+# 2. UPLOAD DE ARQUIVOS
 st.sidebar.markdown("---")
 st.sidebar.header("1. Upload de Arquivos")
 uploaded_file = st.sidebar.file_uploader("Suba a base (CSV ou Excel)", type=["csv", "xlsx"])
@@ -51,18 +40,27 @@ if uploaded_file is not None:
         df_raw = engine.carregar_dados(uploaded_file, uploaded_file.name)
         cols = list(df_raw.columns)
 
-        # 2. PARÂMETROS
-        with st.sidebar.form(key="form_parametros"):
+        with st.sidebar.form(key="form_configuracao_completa"):
             st.header("2. Mapeamento de Colunas")
             col_id = st.selectbox("ID da Loja (Chave Única):", cols)
             col_nome = st.selectbox("Nome da Loja (Rótulo):", cols)
             col_data = st.selectbox("Coluna de Data:", cols)
-            col_metrica = st.selectbox("Métrica (Coluna de Dados):", cols)
 
-            tipo_metrica = st.radio(
-                "Tipo de Métrica:",
-                ["Fluxo / Volume (Número Inteiro)", "Faturamento / Vendas (R$)"]
-            )
+            st.markdown("---")
+            st.subheader("Métricas de Performance")
+
+            opcoes_metricas = ["(Nenhum)"] + cols
+            idx_fluxo = next((i for i, c in enumerate(opcoes_metricas) if "fluxo" in str(c).lower()), 0)
+            idx_vendas = next(
+                (i for i, c in enumerate(opcoes_metricas) if "venda" in str(c).lower() or "faturam" in str(c).lower()),
+                0)
+            idx_tickets = next((i for i, c in enumerate(opcoes_metricas) if
+                                "ticket" in str(c).lower() or "transac" in str(c).lower() or "cupon" in str(c).lower()),
+                               0)
+
+            col_fluxo_sel = st.selectbox("Coluna de Fluxo / Pessoas:", opcoes_metricas, index=idx_fluxo)
+            col_vendas_sel = st.selectbox("Coluna de Vendas / R$:", opcoes_metricas, index=idx_vendas)
+            col_tickets_sel = st.selectbox("Coluna de Tickets / Qtd. Vendas:", opcoes_metricas, index=idx_tickets)
 
             st.markdown("---")
             st.header("3. Granularidade do Relatório")
@@ -86,153 +84,154 @@ if uploaded_file is not None:
             pct_corte = st.slider("Corte de Presença de Dados (%)", 50, 100, 82) / 100.0
 
             st.markdown("---")
-            btn_processar = st.form_submit_button("🚀 Processar Base Comparável", type="primary")
+            btn_processar = st.form_submit_button("🚀 Processar Análise", type="primary")
 
         if btn_processar:
-            # REGISTRO DO LOG NO CONSOLE/SERVIDOR
-            data_hora_acesso = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            print(
-                f"[LOG ACESSO] {data_hora_acesso} | Usuário: {user_email} | Arquivo: {uploaded_file.name} | Visão: {tipo_visao}")
+            col_fluxo = None if col_fluxo_sel == "(Nenhum)" else col_fluxo_sel
+            col_vendas = None if col_vendas_sel == "(Nenhum)" else col_vendas_sel
+            col_tickets = None if col_tickets_sel == "(Nenhum)" else col_tickets_sel
 
-            with st.spinner("Processando dados e aplicando regras de elegibilidade..."):
+            if not col_fluxo and not col_vendas and not col_tickets:
+                st.error("⚠️ Selecione pelo menos uma métrica (Fluxo, Vendas ou Tickets).")
+                st.stop()
 
-                if tipo_metrica == "Faturamento / Vendas (R$)":
-                    fmt_moeda = "R$ {:,.2f}"
-                    fmt_total = "R$ {:,.2f}"
-                    fmt_tabela_valor = "{:,.2f}"
-                else:
-                    fmt_moeda = "{:,.0f}"
-                    fmt_total = "{:,.0f}"
-                    fmt_tabela_valor = "{:,.0f}"
+            with st.spinner("Processando indicadores corporativos..."):
+                df_clean = df_raw.copy()
+                for c in [col_fluxo, col_vendas, col_tickets]:
+                    if c:
+                        df_clean[c] = pd.to_numeric(df_clean[c], errors='coerce').fillna(0)
 
-                # VISÃO CONSOLIDADA
+                # OPÇÃO 1: VISÃO CONSOLIDADA DO PERÍODO
                 if tipo_visao == "Consolidado do Período":
-                    res = engine.processar_base_comparavel(
-                        df=df_raw, col_id=col_id, col_nome=col_nome, col_data=col_data, col_metrica=col_metrica,
+                    res = engine.processar_base_comparavel_completa(
+                        df=df_clean, col_id=col_id, col_nome=col_nome, col_data=col_data,
+                        col_fluxo=col_fluxo, col_vendas=col_vendas, col_tickets=col_tickets,
                         dt_base_inicio=dt_base_ini, dt_base_fim=dt_base_fim,
                         dt_atual_inicio=dt_atual_ini, dt_atual_fim=dt_atual_fim,
-                        pct_cobertura_min=pct_corte,
-                        ignorar_domingos=ignorar_domingos, ignorar_feriados=ignorar_feriados
+                        pct_cobertura_min=pct_corte, ignorar_domingos=ignorar_domingos,
+                        ignorar_feriados=ignorar_feriados
                     )
-                    k = res["kpis"]
-                    df_resumo = res["df_resumo"]
-                    df_auditoria = res["df_auditoria"]
+                    k, df_resumo, df_auditoria = res["kpis"], res["df_resumo"], res["df_auditoria"]
 
                     st.subheader("📌 Resumo Consolidado do Período")
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Lojas Elegíveis", f"{k['total_lojas_comparaveis']} Lojas")
-                    m2.metric(f"Base: {k['label_base']}", f"{k['dias_esperados_base']} dias úteis",
-                              f"SLA {pct_corte * 100:.0f}%: {k['dias_minimos_base']} dias")
-                    m3.metric(f"Atual: {k['label_atual']}", f"{k['dias_esperados_atual']} dias úteis",
-                              f"SLA {pct_corte * 100:.0f}%: {k['dias_minimos_atual']} dias")
-                    m4.metric("Crescimento YoY (SSS)", f"{k['var_pct_total']:.2f}%",
-                              f"Total Atual: {fmt_total.format(k['tot_atual'])}")
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Lojas Elegíveis", f"{k['total_lojas']} Lojas")
+                    if col_fluxo:
+                        c2.metric("Evolução Fluxo (YoY)", f"{k['var_fluxo_total']:.2f}%",
+                                  f"Total: {k['tot_fluxo_atual']:,.0f}")
+                    if col_vendas:
+                        c3.metric("Evolução Vendas (YoY)", f"{k['var_vendas_total']:.2f}%",
+                                  f"Total: R$ {k['tot_vendas_atual']:,.2f}")
+                    if col_fluxo and col_tickets:
+                        c4.metric("Taxa de Conversão", f"{k['conv_total_atual']:.2f}%",
+                                  f"Var: {k['var_conv_pp']:+.2f} p.p.")
+                    elif col_tickets:
+                        c4.metric("Qtd. Tickets (YoY)", f"{k['var_tick_total']:.2f}%",
+                                  f"Total: {k['tot_tick_atual']:,.0f}")
 
                     st.markdown("---")
+                    tab_ap, tab_rep = st.tabs(["📊 Performance por Loja", "⚠️ Auditoria de Exclusão"])
 
-                    tab_aprovadas, tab_reprovadas = st.tabs(
-                        ["✅ Lojas Comparáveis (Aprovadas)", "⚠️ Auditoria de Exclusão (Motivo da Reprovação)"])
+                    with tab_ap:
+                        df_disp = df_resumo.copy()
+                        for col_c in df_disp.columns:
+                            if "fluxo" in str(col_c).lower() or "ticket" in str(col_c).lower():
+                                if "YoY" not in str(col_c) and "Conv" not in str(col_c):
+                                    df_disp[col_c] = df_disp[col_c].apply(
+                                        lambda x: f"{x:,.0f}" if pd.notnull(x) else "0")
+                            elif "venda" in str(col_c).lower() or "tm_" in str(col_c).lower():
+                                if "YoY" not in str(col_c):
+                                    df_disp[col_c] = df_disp[col_c].apply(
+                                        lambda x: f"R$ {x:,.2f}" if pd.notnull(x) else "R$ 0.00")
+                            if "YoY" in str(col_c) or "Conv_" in str(col_c):
+                                df_disp[col_c] = df_disp[col_c].apply(
+                                    lambda x: f"{x:.2f}%" if pd.notnull(x) else "0.00%")
+                            elif str(col_c) == "Var_Conv_pp":
+                                df_disp[col_c] = df_disp[col_c].apply(
+                                    lambda x: f"{x:+.2f} p.p." if pd.notnull(x) else "0.00 p.p.")
 
-                    with tab_aprovadas:
-                        st.dataframe(
-                            df_resumo.style.format({
-                                "Valor_Periodo_Base": fmt_tabela_valor,
-                                "Valor_Periodo_Atual": fmt_tabela_valor,
-                                "Var_Abs_YoY": fmt_tabela_valor,
-                                "Var_Pct_YoY": "{:.2f}%"
-                            }),
-                            use_container_width=True
-                        )
+                        st.dataframe(df_disp, use_container_width=True)
 
-                    with tab_reprovadas:
+                    with tab_rep:
                         if not df_auditoria.empty:
-                            st.warning(f"Total de {len(df_auditoria)} lojas desconsideradas da base comparável.")
+                            st.warning(f"Total de {len(df_auditoria)} lojas desconsideradas.")
                             st.dataframe(df_auditoria, use_container_width=True)
                         else:
-                            st.success("🎉 Nenhuma loja foi excluída! Todas cumpriram a meta de dias ativos.")
+                            st.success("🎉 Nenhuma loja foi excluída!")
 
-                    buffer = io.BytesIO()
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        df_resumo.to_excel(writer, sheet_name='Consolidado_Aprovadas', index=False)
-                        if not df_auditoria.empty:
-                            df_auditoria.to_excel(writer, sheet_name='Auditoria_Exclusoes', index=False)
-
-                    st.download_button(
-                        label="📥 Exportar Consolidado (.xlsx)",
-                        data=buffer.getvalue(),
-                        file_name="base_comparavel_consolidada.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-
-                # VISÃO MÊS A MÊS
+                # OPÇÃO 2: DETALHAMENTO MÊS A MÊS
                 else:
-                    res_m = engine.processar_base_comparavel_mensal(
-                        df=df_raw, col_id=col_id, col_nome=col_nome, col_data=col_data, col_metrica=col_metrica,
+                    res_m = engine.processar_base_comparavel_mensal_completa(
+                        df=df_clean, col_id=col_id, col_nome=col_nome, col_data=col_data,
+                        col_fluxo=col_fluxo, col_vendas=col_vendas, col_tickets=col_tickets,
                         dt_base_inicio=dt_base_ini, dt_base_fim=dt_base_fim,
                         dt_atual_inicio=dt_atual_ini, dt_atual_fim=dt_atual_fim,
-                        pct_cobertura_min=pct_corte,
-                        ignorar_domingos=ignorar_domingos, ignorar_feriados=ignorar_feriados
+                        pct_cobertura_min=pct_corte, ignorar_domingos=ignorar_domingos,
+                        ignorar_feriados=ignorar_feriados
                     )
 
-                    df_totais = res_m["df_totais_mensais"]
-                    df_aud_mensal = res_m["df_auditoria_mensal"]
+                    df_tot = res_m["df_totais_mensais"].copy()
+                    df_lojas = res_m["df_evolucao_lojas"].copy()
+                    df_aud_m = res_m["df_auditoria_mensal"].copy()
 
                     st.subheader("📊 Resumo Executivo Mês a Mês")
-                    st.dataframe(
-                        df_totais.style.format({
-                            "Total Base": fmt_moeda,
-                            "Total Atual": fmt_moeda,
-                            "YoY (%)": "{:.2f}%"
-                        }),
-                        use_container_width=True
-                    )
 
-                    st.markdown("#### 📈 Evolução do Crescimento YoY (%) no Tempo")
-                    chart_data = df_totais.set_index("Mes")[["YoY (%)"]]
-                    st.line_chart(chart_data)
+                    # Formatação dos totais da rede
+                    df_tot_disp = df_tot.copy()
+                    df_tot_disp["Fluxo Atual"] = df_tot_disp["Fluxo Atual"].apply(lambda x: f"{x:,.0f}")
+                    df_tot_disp["Fluxo YoY (%)"] = df_tot_disp["Fluxo YoY (%)"].apply(lambda x: f"{x:.2f}%")
+                    df_tot_disp["Vendas Atual (R$)"] = df_tot_disp["Vendas Atual (R$)"].apply(lambda x: f"R$ {x:,.2f}")
+                    df_tot_disp["Vendas YoY (%)"] = df_tot_disp["Vendas YoY (%)"].apply(lambda x: f"{x:.2f}%")
+                    df_tot_disp["Conversão (%)"] = df_tot_disp["Conversão (%)"].apply(lambda x: f"{x:.2f}%")
+
+                    st.dataframe(df_tot_disp, use_container_width=True)
+
+                    # Gráfico de tendência
+                    if col_vendas and col_fluxo:
+                        st.line_chart(df_tot.set_index("Mes")[["Vendas YoY (%)", "Fluxo YoY (%)"]])
+                    elif col_vendas:
+                        st.line_chart(df_tot.set_index("Mes")[["Vendas YoY (%)"]])
+                    elif col_fluxo:
+                        st.line_chart(df_tot.set_index("Mes")[["Fluxo YoY (%)"]])
 
                     st.markdown("---")
+                    tab_m_ap, tab_m_rep = st.tabs(["📋 Evolução por Loja (Mês a Mês)", "⚠️ Auditoria Mensal"])
 
-                    tab_m_aprovadas, tab_m_reprovadas = st.tabs(
-                        ["📋 Evolução por Loja (Aprovadas)", "⚠️ Auditoria de Exclusão Mensal"])
+                    with tab_m_ap:
+                        # Formatação visual das colunas de evolução mensal
+                        for c in df_lojas.columns:
+                            if "Var_" in c or "Conv_" in c:
+                                df_lojas[c] = df_lojas[c].apply(lambda x: f"{x:.2f}%" if pd.notnull(x) else "0.00%")
+                        st.dataframe(df_lojas, use_container_width=True)
 
-                    with tab_m_aprovadas:
-                        df_lojas = res_m["df_evolucao_lojas"].copy()
-                        format_dict = {}
-                        for col in df_lojas.columns:
-                            if col.startswith("YoY_"):
-                                format_dict[col] = "{:.2f}%"
-                            elif col.startswith(("Base_", "Atual_")):
-                                format_dict[col] = fmt_tabela_valor
-
-                        st.dataframe(
-                            df_lojas.style.format(format_dict),
-                            use_container_width=True
-                        )
-
-                    with tab_m_reprovadas:
-                        if not df_aud_mensal.empty:
-                            st.warning(
-                                "Detalhamento de lojas e meses em que houve descumprimento do SLA de dados (abaixo de 82%):")
-                            st.dataframe(df_aud_mensal, use_container_width=True)
+                    with tab_m_rep:
+                        if not df_aud_m.empty:
+                            st.warning("Lojas excluídas em cada competência mensal:")
+                            st.dataframe(df_aud_m, use_container_width=True)
                         else:
-                            st.success("🎉 Todas as lojas cumpriram a meta em todos os meses!")
+                            st.success("🎉 Nenhuma loja excluída em nenhum dos meses!")
 
-                    buffer = io.BytesIO()
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        df_totais.to_excel(writer, sheet_name='Resumo_Mensal', index=False)
-                        res_m["df_evolucao_lojas"].to_excel(writer, sheet_name='Evolucao_Lojas', index=False)
-                        if not df_aud_mensal.empty:
-                            df_aud_mensal.to_excel(writer, sheet_name='Auditoria_Exclusoes_Mensal', index=False)
+                # EXPORTAÇÃO EXCEL
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    if tipo_visao == "Consolidado do Período":
+                        df_resumo.to_excel(writer, sheet_name='Base_Comparavel', index=False)
+                        if not df_auditoria.empty:
+                            df_auditoria.to_excel(writer, sheet_name='Lojas_Excluidas', index=False)
+                    else:
+                        df_tot.to_excel(writer, sheet_name='Totais_Mensais', index=False)
+                        df_lojas.to_excel(writer, sheet_name='Evolucao_Lojas', index=False)
+                        if not df_aud_m.empty:
+                            df_aud_m.to_excel(writer, sheet_name='Lojas_Excluidas_Mensal', index=False)
 
-                    st.download_button(
-                        label="📥 Exportar Detalhamento Mês a Mês (.xlsx)",
-                        data=buffer.getvalue(),
-                        file_name="base_comparavel_mes_a_mes.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                st.download_button(
+                    label="📥 Exportar Relatório (.xlsx)",
+                    data=buffer.getvalue(),
+                    file_name="base_comparavel.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
         else:
-            st.info("👈 Selecione o tipo de métrica, ajuste os parâmetros e clique em **🚀 Processar Base Comparável**.")
+            st.info("👈 Mapeie os campos no menu lateral e clique em **🚀 Processar Análise**.")
 
     except Exception as e:
         st.error(f"Erro ao processar: {e}")
