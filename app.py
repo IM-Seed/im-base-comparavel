@@ -6,6 +6,7 @@ import core_engine as engine
 
 st.set_page_config(page_title="Base Comparável Dinâmica | IM", layout="wide", page_icon="📅")
 
+# --- LOGO DA SEED NA BARRA LATERAL ---
 URL_LOGO_SEED = "http://seeddigital.com.br/images/Logo%20Seed%20Registrado.jpg"
 try:
     st.sidebar.image(URL_LOGO_SEED, use_container_width=True)
@@ -15,7 +16,7 @@ except Exception:
 st.title("📅 Validador de Base Comparável (Campanhas & SSS)")
 st.caption("Análise de Performance, Calendário Corporativo e Elegibilidade de Lojas")
 
-# 1. VALIDAÇÃO DE ACESSO
+# --- 1. VALIDAÇÃO DE ACESSO E-MAIL SEED ---
 st.sidebar.header("🔑 Identificação do Analista")
 usuario_input = st.sidebar.text_input("E-mail Corporativo:", placeholder="seu.nome@seeddigital.com.br").strip().lower()
 
@@ -30,7 +31,15 @@ else:
     st.warning("👈 Por favor, informe seu e-mail corporativo no menu lateral para liberar o acesso ao sistema.")
     st.stop()
 
-# 2. UPLOAD DE ARQUIVOS
+# --- LINK DA FONTE DE DADOS & APIS (NOVO BLOCO) ---
+st.sidebar.markdown("---")
+st.sidebar.header("🔗 Fontes & Integrações")
+
+URL_REPORT_SEED = "https://analytics.seeddigital.com.br/#s=/gdc/workspaces/ypz93j7xfq9jarggjdxrd47nydxocpzp|analysisPage|/gdc/md/ypz93j7xfq9jarggjdxrd47nydxocpzp/obj/27495056|/gdc/md/ypz93j7xfq9jarggjdxrd47nydxocpzp/obj/27495057|yui_3_14_1_1_1786992826869_155066"
+
+st.sidebar.link_button("📊 Abrir Report de Exemplo (Seed Analytics)", URL_REPORT_SEED, use_container_width=True)
+
+# --- 2. UPLOAD DE ARQUIVOS ---
 st.sidebar.markdown("---")
 st.sidebar.header("1. Upload de Arquivos")
 uploaded_file = st.sidebar.file_uploader("Suba a base (CSV ou Excel)", type=["csv", "xlsx"])
@@ -176,7 +185,6 @@ if uploaded_file is not None:
 
                     st.subheader("📊 Resumo Executivo Mês a Mês")
 
-                    # Formatação dos totais da rede
                     df_tot_disp = df_tot.copy()
                     df_tot_disp["Fluxo Atual"] = df_tot_disp["Fluxo Atual"].apply(lambda x: f"{x:,.0f}")
                     df_tot_disp["Fluxo YoY (%)"] = df_tot_disp["Fluxo YoY (%)"].apply(lambda x: f"{x:.2f}%")
@@ -186,7 +194,6 @@ if uploaded_file is not None:
 
                     st.dataframe(df_tot_disp, use_container_width=True)
 
-                    # Gráfico de tendência
                     if col_vendas and col_fluxo:
                         st.line_chart(df_tot.set_index("Mes")[["Vendas YoY (%)", "Fluxo YoY (%)"]])
                     elif col_vendas:
@@ -198,7 +205,6 @@ if uploaded_file is not None:
                     tab_m_ap, tab_m_rep = st.tabs(["📋 Evolução por Loja (Mês a Mês)", "⚠️ Auditoria Mensal"])
 
                     with tab_m_ap:
-                        # Formatação visual das colunas de evolução mensal
                         for c in df_lojas.columns:
                             if "Var_" in c or "Conv_" in c:
                                 df_lojas[c] = df_lojas[c].apply(lambda x: f"{x:.2f}%" if pd.notnull(x) else "0.00%")
