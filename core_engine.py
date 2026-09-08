@@ -23,14 +23,14 @@ def carregar_dados(file_stream, filename: str) -> pd.DataFrame:
 def filtrar_dias_operacionais(df: pd.DataFrame, col_data: str, ignorar_domingos: bool = True,
                               ignorar_feriados: bool = True) -> pd.DataFrame:
     df_filtered = df.copy()
-    df_filtered[col_data] = pd.to_datetime(df_filtered[col_data])
+    df_filtered[col_data] = pd.to_datetime(df_filtered[col_data], errors='coerce')
 
     if ignorar_domingos:
         df_filtered = df_filtered[df_filtered[col_data].dt.dayofweek != 6]
 
     if ignorar_feriados:
-        feriados_dt = pd.to_datetime(FERIADOS_NACIONAIS)
-        df_filtered = df_filtered[~df_filtered[col_data].dt.floor('D').isin(feriados_dt)]
+        feriados_dt = set(pd.to_datetime(FERIADOS_NACIONAIS).date)
+        df_filtered = df_filtered[~df_filtered[col_data].dt.date.isin(feriados_dt)]
 
     return df_filtered
 
@@ -43,22 +43,22 @@ def obter_dias_operacionais_intervalo(dt_inicio: datetime.date, dt_fim: datetime
     if ignorar_domingos:
         df_dias = df_dias[df_dias['data'].dt.dayofweek != 6]
     if ignorar_feriados:
-        feriados_dt = pd.to_datetime(FERIADOS_NACIONAIS)
-        df_dias = df_dias[~df_dias['data'].dt.floor('D').isin(feriados_dt)]
+        feriados_dt = set(pd.to_datetime(FERIADOS_NACIONAIS).date)
+        df_dias = df_dias[~df_dias['data'].dt.date.isin(feriados_dt)]
 
     return len(df_dias)
 
 
-# --- 1. PROCESSAMENTO CONSOLIDADO COMPLETO ---
+# --- 1. PROCESSAMENTO CONSOLIDADO COMPLETO (COM P.A.) ---
 def processar_base_comparavel_completa(
         df: pd.DataFrame, col_id: str, col_nome: str, col_data: str,
-        col_fluxo: str, col_vendas: str, col_tickets: str,
+        col_fluxo: str, col_vendas: str, col_tickets: str, col_pecas: str,
         dt_base_inicio: datetime.date, dt_base_fim: datetime.date,
         dt_atual_inicio: datetime.date, dt_atual_fim: datetime.date,
         pct_cobertura_min: float = 0.82, ignorar_domingos: bool = True, ignorar_feriados: bool = True
 ) -> dict:
     df_work = df.copy()
-    df_work[col_data] = pd.to_datetime(df_work[col_data])
+    df_work[col_data] = pd.to_datetime(df_work[col_data], errors='coerce')
     df_operacional = filtrar_dias_operacionais(df_work, col_data, ignorar_domingos, ignorar_feriados)
 
     dias_esperados_base = obter_dias_operacionais_intervalo(dt_base_inicio, dt_base_fim, ignorar_domingos,
@@ -95,7 +95,7 @@ def processar_base_comparavel_completa(
     df_comp_base = df_base[df_base[col_id].isin(lojas_elegiveis)]
     df_comp_atual = df_atual[df_atual[col_id].isin(lojas_elegiveis)]
 
-    cols_met = [c for c in [col_fluxo, col_vendas, col_tickets] if c is not None]
+    cols_met = [c for c in [col_fluxo, col_vendas, col_tickets, col_pecas] if c is not None]
 
     grp_base = df_comp_base.groupby([col_id, col_nome])[cols_met].sum().reset_index()
     grp_atual = df_comp_atual.groupby([col_id, col_nome])[cols_met].sum().reset_index()
@@ -103,6 +103,7 @@ def processar_base_comparavel_completa(
     df_resumo = pd.merge(grp_base, grp_atual, on=[col_id, col_nome], suffixes=('_base', '_atual'), how='outer').fillna(
         0)
 
+    # EVOLUÇÕES YoY
     if col_fluxo:
         df_resumo['Var_Fluxo_YoY (%)'] = np.where(df_resumo[f"{col_fluxo}_base"] > 0, (
                     (df_resumo[f"{col_fluxo}_atual"] - df_resumo[f"{col_fluxo}_base"]) / df_resumo[
@@ -115,7 +116,12 @@ def processar_base_comparavel_completa(
         df_resumo['Var_Tickets_YoY (%)'] = np.where(df_resumo[f"{col_tickets}_base"] > 0, (
                     (df_resumo[f"{col_tickets}_atual"] - df_resumo[f"{col_tickets}_base"]) / df_resumo[
                 f"{col_tickets}_base"]) * 100, 0.0)
+    if col_pecas:
+        df_resumo['Var_Pecas_YoY (%)'] = np.where(df_resumo[f"{col_pecas}_base"] > 0, (
+                    (df_resumo[f"{col_pecas}_atual"] - df_resumo[f"{col_pecas}_base"]) / df_resumo[
+                f"{col_pecas}_base"]) * 100, 0.0)
 
+    # TAXA DE CONVERSÃO REAL (TICKETS / FLUXO)
     if col_fluxo and col_tickets:
         df_resumo['Conv_Base (%)'] = np.where(df_resumo[f"{col_fluxo}_base"] > 0,
                                               (df_resumo[f"{col_tickets}_base"] / df_resumo[f"{col_fluxo}_base"]) * 100,
@@ -124,21 +130,36 @@ def processar_base_comparavel_completa(
                     df_resumo[f"{col_tickets}_atual"] / df_resumo[f"{col_fluxo}_atual"]) * 100, 0.0)
         df_resumo['Var_Conv_pp'] = df_resumo['Conv_Atual (%)'] - df_resumo['Conv_Base (%)']
 
+    # TICKET MÉDIO (VENDAS R$ / TICKETS)
     if col_vendas and col_tickets:
         df_resumo['TM_Base (R$)'] = np.where(df_resumo[f"{col_tickets}_base"] > 0,
                                              df_resumo[f"{col_vendas}_base"] / df_resumo[f"{col_tickets}_base"], 0.0)
         df_resumo['TM_Atual (R$)'] = np.where(df_resumo[f"{col_tickets}_atual"] > 0,
                                               df_resumo[f"{col_vendas}_atual"] / df_resumo[f"{col_tickets}_atual"], 0.0)
 
+    # P.A. - PRODUTOS POR ATENDIMENTO (PEÇAS / TICKETS)
+    if col_pecas and col_tickets:
+        df_resumo['PA_Base'] = np.where(df_resumo[f"{col_tickets}_base"] > 0,
+                                        df_resumo[f"{col_pecas}_base"] / df_resumo[f"{col_tickets}_base"], 0.0)
+        df_resumo['PA_Atual'] = np.where(df_resumo[f"{col_tickets}_atual"] > 0,
+                                         df_resumo[f"{col_pecas}_atual"] / df_resumo[f"{col_tickets}_atual"], 0.0)
+        df_resumo['Var_PA_Abs'] = df_resumo['PA_Atual'] - df_resumo['PA_Base']
+
+    # TOTAIS DA REDE
     tot_fluxo_base = df_resumo[f"{col_fluxo}_base"].sum() if col_fluxo else 0
     tot_fluxo_atual = df_resumo[f"{col_fluxo}_atual"].sum() if col_fluxo else 0
     tot_vendas_base = df_resumo[f"{col_vendas}_base"].sum() if col_vendas else 0
     tot_vendas_atual = df_resumo[f"{col_vendas}_atual"].sum() if col_vendas else 0
     tot_tick_base = df_resumo[f"{col_tickets}_base"].sum() if col_tickets else 0
     tot_tick_atual = df_resumo[f"{col_tickets}_atual"].sum() if col_tickets else 0
+    tot_pecas_base = df_resumo[f"{col_pecas}_base"].sum() if col_pecas else 0
+    tot_pecas_atual = df_resumo[f"{col_pecas}_atual"].sum() if col_pecas else 0
 
     conv_total_base = (tot_tick_base / tot_fluxo_base * 100) if tot_fluxo_base > 0 else 0.0
     conv_total_atual = (tot_tick_atual / tot_fluxo_atual * 100) if tot_fluxo_atual > 0 else 0.0
+
+    pa_total_base = (tot_pecas_base / tot_tick_base) if tot_tick_base > 0 else 0.0
+    pa_total_atual = (tot_pecas_atual / tot_tick_atual) if tot_tick_atual > 0 else 0.0
 
     return {
         "df_resumo": df_resumo, "df_auditoria": df_auditoria,
@@ -152,15 +173,17 @@ def processar_base_comparavel_completa(
             "tot_tick_atual": tot_tick_atual,
             "var_tick_total": ((tot_tick_atual - tot_tick_base) / tot_tick_base * 100) if tot_tick_base > 0 else 0,
             "conv_total_atual": conv_total_atual,
-            "var_conv_pp": conv_total_atual - conv_total_base
+            "var_conv_pp": conv_total_atual - conv_total_base,
+            "pa_total_atual": pa_total_atual,
+            "var_pa_abs": pa_total_atual - pa_total_base
         }
     }
 
 
-# --- 2. PROCESSAMENTO MÊS A MÊS ---
+# --- 2. PROCESSAMENTO MÊS A MÊS COMPLETO (COM P.A.) ---
 def processar_base_comparavel_mensal_completa(
         df: pd.DataFrame, col_id: str, col_nome: str, col_data: str,
-        col_fluxo: str, col_vendas: str, col_tickets: str,
+        col_fluxo: str, col_vendas: str, col_tickets: str, col_pecas: str,
         dt_base_inicio: datetime.date, dt_base_fim: datetime.date,
         dt_atual_inicio: datetime.date, dt_atual_fim: datetime.date,
         pct_cobertura_min: float = 0.82, ignorar_domingos: bool = True, ignorar_feriados: bool = True
@@ -182,7 +205,7 @@ def processar_base_comparavel_mensal_completa(
 
         res_m = processar_base_comparavel_completa(
             df=df, col_id=col_id, col_nome=col_nome, col_data=col_data,
-            col_fluxo=col_fluxo, col_vendas=col_vendas, col_tickets=col_tickets,
+            col_fluxo=col_fluxo, col_vendas=col_vendas, col_tickets=col_tickets, col_pecas=col_pecas,
             dt_base_inicio=b_ini, dt_base_fim=b_fim,
             dt_atual_inicio=a_ini, dt_atual_fim=a_fim,
             pct_cobertura_min=pct_cobertura_min, ignorar_domingos=ignorar_domingos, ignorar_feriados=ignorar_feriados
@@ -191,11 +214,11 @@ def processar_base_comparavel_mensal_completa(
         df_m = res_m["df_resumo"].copy()
         mes_label = a_ini.strftime('%m/%Y')
 
-        # Seleciona as variações principais do mês
         cols_sub = [col_id, col_nome]
         if col_fluxo: cols_sub.append('Var_Fluxo_YoY (%)')
         if col_vendas: cols_sub.append('Var_Vendas_YoY (%)')
         if col_fluxo and col_tickets: cols_sub.append('Conv_Atual (%)')
+        if col_pecas and col_tickets: cols_sub.append('PA_Atual')
 
         df_sub = df_m[cols_sub].copy()
         df_sub.columns = [c if c in [col_id, col_nome] else f"{c}_{mes_label}" for c in cols_sub]
@@ -214,6 +237,7 @@ def processar_base_comparavel_mensal_completa(
             "Vendas Atual (R$)": res_m["kpis"]["tot_vendas_atual"],
             "Vendas YoY (%)": res_m["kpis"]["var_vendas_total"],
             "Conversão (%)": res_m["kpis"]["conv_total_atual"],
+            "P.A. (Peças/Ticket)": res_m["kpis"]["pa_total_atual"],
             "Lojas Comparáveis": res_m["kpis"]["total_lojas"]
         })
 
