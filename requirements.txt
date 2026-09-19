@@ -3,3 +3,4 @@ pandas
 openpyxl
 numpy
 plotly
+holidays>=0.104
